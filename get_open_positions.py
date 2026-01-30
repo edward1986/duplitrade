@@ -1,17 +1,18 @@
-# get_open_positions.py
 import os
 import sys
+import json
 import requests
+from datetime import datetime, timezone
 
 SIGNIN_URL = "https://fa.new.duplitrade.com/api/auth/signin"
 OPEN_POSITIONS_URL = "https://fa.new.duplitrade.com/api/user/get_provider_open_positions"
 
 def require_env(name: str) -> str:
-    val = os.getenv(name)
-    if not val:
+    v = os.getenv(name)
+    if not v:
         print(f"Missing env var: {name}", file=sys.stderr)
         sys.exit(2)
-    return val
+    return v
 
 def signin_and_get_token(email: str, password: str) -> str:
     r = requests.post(
@@ -20,7 +21,6 @@ def signin_and_get_token(email: str, password: str) -> str:
         headers={"Accept": "application/json"},
         timeout=30,
     )
-
     if not r.ok:
         print("Signin failed:", r.status_code, r.text, file=sys.stderr)
         sys.exit(1)
@@ -31,53 +31,65 @@ def signin_and_get_token(email: str, password: str) -> str:
         print("Signin did not return JSON:", r.text, file=sys.stderr)
         sys.exit(1)
 
-    # Common token keys to try (adjust if your API uses a different field)
     token = (
         data.get("token")
         or data.get("tokn")
         or data.get("access_token")
         or data.get("accessToken")
-        or data.get("data", {}).get("token")
+        or (data.get("data") or {}).get("token")
+        or (data.get("data") or {}).get("tokn")
     )
 
     if not token:
-        print("Could not find token in signin response keys:", list(data.keys()), file=sys.stderr)
-        print("Full JSON:", data, file=sys.stderr)
+        print("Token not found in signin response keys:", list(data.keys()), file=sys.stderr)
         sys.exit(1)
 
     return token
 
-def get_open_positions(provider_id: str, token: str) -> dict | list | str:
+def fetch_open_positions(provider_id: str, token: str):
     r = requests.get(
         OPEN_POSITIONS_URL,
         params={"provider_id": provider_id},
         headers={
             "Accept": "application/json",
-            "token": token,  # <-- header name exactly as you said
+            "token": token,  # header name exactly: token
         },
         timeout=30,
     )
-
     if not r.ok:
-        print("Open positions request failed:", r.status_code, r.text, file=sys.stderr)
+        print("Open positions failed:", r.status_code, r.text, file=sys.stderr)
         sys.exit(1)
 
     try:
         return r.json()
     except ValueError:
-        return r.text
+        # If API returns non-JSON, still save it as text payload
+        return {"raw": r.text}
 
 def main():
     email = require_env("FA_EMAIL")
     password = require_env("FA_PASSWORD")
-
     provider_id = os.getenv("PROVIDER_ID", "931")
 
     token = signin_and_get_token(email, password)
-    result = get_open_positions(provider_id, token)
+    positions = fetch_open_positions(provider_id, token)
 
-    # Print result (do NOT print token)
-    print(result)
+    # Store in repo under /open_positions/<provider_id>.json
+    out_dir = os.getenv("OUT_DIR", "open_positions")
+    os.makedirs(out_dir, exist_ok=True)
+
+    out_path = os.path.join(out_dir, f"{provider_id}.json")
+
+    payload = {
+        "provider_id": provider_id,
+        "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
+        "data": positions,
+    }
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    print(f"Saved: {out_path}")
 
 if __name__ == "__main__":
     main()
