@@ -1,14 +1,14 @@
 {
   "provider_id": "931",
-  "fetched_at_utc": "2026-01-30T03:14:58.574267+00:00",
+  "fetched_at_utc": "2026-01-30T03:33:13.932065+00:00",
   "data": {
-    "totalNetPL": -786.4300000000001,
+    "totalNetPL": -722.4300000000001,
     "size": 0.2,
     "swap": -41.43,
-    "pips": -742.5,
+    "pips": -681,
     "openPositions": [
       {
-        "ticket": 227013548,
+        "ticket": 127013548,
         "symbol": "S&P500",
         "strategy": "Trio",
         "type": "Buy",
@@ -16,10 +16,10 @@
         "open": 7018.75,
         "stop": 0,
         "limit": 0,
-        "current": 6965.5,
+        "current": 6969.75,
         "swap": -17.23,
-        "netPL": -552.23,
-        "pips": -532.5,
+        "netPL": -507.23,
+        "pips": -490,
         "openTime": "2026-01-29T06:00:00.000Z",
         "tradeCopied": false
       },
@@ -32,10 +32,10 @@
         "open": 49178,
         "stop": 0,
         "limit": 0,
-        "current": 48968,
+        "current": 48987,
         "swap": -24.2,
-        "netPL": -234.2,
-        "pips": -210,
+        "netPL": -215.2,
+        "pips": -191,
         "openTime": "2026-01-28T07:00:00.000Z",
         "tradeCopied": false
       }
