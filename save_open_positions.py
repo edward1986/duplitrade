@@ -89,10 +89,10 @@ def send_telegram_html(bot_token: str, chat_id: str, html: str) -> None:
     r.raise_for_status()
 
 
-def extract_positions_map(data_wrapper: Any) -> dict[int, str]:
+def extract_positions_map(data_wrapper: Any) -> dict[int, dict]:
     """
-    Expects wrapper: {"data": {"openPositions": [ {"ticket":..., "symbol":...}, ... ]}}
-    Returns: {ticket:int -> symbol:str}
+    Expects wrapper: {"data": {"openPositions": [ {"ticket":..., "symbol":..., "type":...}, ... ]}}
+    Returns: {ticket:int -> {"symbol": str, "type": str}}
     """
     if not isinstance(data_wrapper, dict):
         return {}
@@ -103,7 +103,7 @@ def extract_positions_map(data_wrapper: Any) -> dict[int, str]:
     if not isinstance(ops, list):
         return {}
 
-    m: dict[int, str] = {}
+    m: dict[int, dict] = {}
     for p in ops:
         if not isinstance(p, dict) or "ticket" not in p:
             continue
@@ -111,20 +111,30 @@ def extract_positions_map(data_wrapper: Any) -> dict[int, str]:
             ticket = int(p["ticket"])
         except (TypeError, ValueError):
             continue
-        symbol = p.get("symbol") or "UNKNOWN"
-        m[ticket] = str(symbol)
+
+        symbol = str(p.get("symbol") or "UNKNOWN")
+        typ = str(p.get("type") or "UNKNOWN")  # Buy/Sell etc.
+        m[ticket] = {"symbol": symbol, "type": typ}
+
     return m
 
 
-def build_message(provider_id: str, old_map: dict[int, str], new_map: dict[int, str], payload_data: dict) -> str:
+def build_message(provider_id: str, old_map: dict[int, dict], new_map: dict[int, dict], payload_data: dict) -> str:
     old_ids = set(old_map.keys())
     new_ids = set(new_map.keys())
 
     added_ids = sorted(new_ids - old_ids)
     removed_ids = sorted(old_ids - new_ids)
 
-    def fmt(items: list[int], src: dict[int, str]) -> str:
-        return ", ".join([f"{i} ({src.get(i, 'UNKNOWN')})" for i in items])
+    def fmt(items: list[int], src: dict[int, dict]) -> str:
+        # "127013548 (S&P500, Buy), 126691979 (DJ30, Buy)"
+        parts = []
+        for i in items:
+            meta = src.get(i) or {}
+            symbol = meta.get("symbol", "UNKNOWN")
+            typ = meta.get("type", "UNKNOWN")
+            parts.append(f"{i} ({symbol}, {typ})")
+        return ", ".join(parts)
 
     total_netpl = payload_data.get("totalNetPL")
     pips = payload_data.get("pips")
@@ -181,7 +191,7 @@ def main():
     existing = read_existing_payload(out_path)
     old_map = extract_positions_map(existing) if existing else {}
 
-    # Compare only ticket IDs
+    # Compare only ticket IDs (your "change detector")
     if existing and set(new_map.keys()) == set(old_map.keys()):
         print(f"No ticket changes for provider {provider_id}. Not saving.")
         sys.exit(0)
