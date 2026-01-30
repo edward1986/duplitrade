@@ -2,11 +2,6 @@ name: Save Provider Open Positions
 
 on:
   workflow_dispatch:
-    inputs:
-      provider_id:
-        description: "Provider ID to fetch"
-        required: false
-        default: "931"
   schedule:
     - cron: "0 * * * *"   # every hour (UTC)
 
