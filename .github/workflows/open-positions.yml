@@ -1,15 +1,27 @@
-name: DupliTrade Get Provider Open Positions
+name: Save Provider Open Positions
 
 on:
   workflow_dispatch:
+    inputs:
+      provider_id:
+        description: "Provider ID to fetch"
+        required: true
+        default: "931"
+
+permissions:
+  contents: write   # IMPORTANT: allows committing to repo
 
 jobs:
-  run:
+  fetch_and_commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -18,10 +30,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Fetch open positions
+      - name: Fetch and save JSON
         env:
           FA_EMAIL: ${{ secrets.FA_EMAIL }}
           FA_PASSWORD: ${{ secrets.FA_PASSWORD }}
-          PROVIDER_ID: "931"
+          PROVIDER_ID: ${{ inputs.provider_id }}
+          OUT_DIR: open_positions
         run: |
-          python get_open_positions.py
+          python save_open_positions.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add open_positions/*.json
+
+          # Commit only if there are changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update open positions for provider ${{ inputs.provider_id }}"
+          git push
