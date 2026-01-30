@@ -2,7 +2,7 @@ name: Save Provider Open Positions
 
 on:
   schedule:
-    - cron: "0 * * * *"   # every hour (UTC)
+    - cron: "*/1 * * * *"
   workflow_dispatch:
 
 permissions:
