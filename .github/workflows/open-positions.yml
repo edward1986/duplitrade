@@ -5,8 +5,10 @@ on:
     inputs:
       provider_id:
         description: "Provider ID to fetch"
-        required: true
+        required: false
         default: "931"
+  schedule:
+    - cron: "0 * * * *"   # every hour (UTC)
 
 permissions:
   contents: write   # IMPORTANT: allows committing to repo
