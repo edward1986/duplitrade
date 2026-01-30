@@ -3,6 +3,7 @@ name: Save Provider Open Positions
 on:
   schedule:
     - cron: "0 * * * *"   # every hour (UTC)
+  workflow_dispatch:
 
 permissions:
   contents: write   # IMPORTANT: allows committing to repo
