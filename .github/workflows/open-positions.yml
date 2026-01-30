@@ -34,7 +34,9 @@ jobs:
         env:
           FA_EMAIL: ${{ secrets.FA_EMAIL }}
           FA_PASSWORD: ${{ secrets.FA_PASSWORD }}
-          PROVIDER_ID: ${{ inputs.provider_id }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROVIDER_ID: "931"
           OUT_DIR: open_positions
         run: |
           python save_open_positions.py
