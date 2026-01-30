@@ -55,30 +55,26 @@ def fetch_open_positions(provider_id: str, token: str) -> Any:
     except ValueError:
         return {"raw": r.text}
 
-def extract_tickets(api_payload: Any) -> List[int]:
+def extract_tickets(data_wrapper: Any) -> List[int]:
     """
-    Extracts tickets from: data.openPositions[].ticket
-    Returns a sorted list of ints (order-insensitive compare).
+    Expects wrapper: {"data": { ... openPositions: [ {ticket:...}, ... ] }}
+    Returns sorted list of ticket ints.
     """
-    if not isinstance(api_payload, dict):
+    if not isinstance(data_wrapper, dict):
         return []
-
-    data = api_payload.get("data")
+    data = data_wrapper.get("data")
     if not isinstance(data, dict):
         return []
-
-    open_positions = data.get("openPositions")
-    if not isinstance(open_positions, list):
+    ops = data.get("openPositions")
+    if not isinstance(ops, list):
         return []
-
     tickets: List[int] = []
-    for p in open_positions:
+    for p in ops:
         if isinstance(p, dict) and "ticket" in p:
             try:
                 tickets.append(int(p["ticket"]))
             except (TypeError, ValueError):
                 pass
-
     tickets.sort()
     return tickets
 
@@ -92,41 +88,94 @@ def read_existing_payload(path: str) -> Optional[dict]:
     except Exception:
         return None
 
+def html_escape(s: str) -> str:
+    return (
+        s.replace("&", "&amp;")
+         .replace("<", "&lt;")
+         .replace(">", "&gt;")
+    )
+
+def send_telegram_html(bot_token: str, chat_id: str, html: str) -> None:
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    r = requests.post(
+        url,
+        json={
+            "chat_id": chat_id,
+            "text": html,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        },
+        timeout=30,
+    )
+    r.raise_for_status()
+
+def build_message(provider_id: str, old_tickets: List[int], new_tickets: List[int], payload_data: dict) -> str:
+    added = [t for t in new_tickets if t not in old_tickets]
+    removed = [t for t in old_tickets if t not in new_tickets]
+
+    total_netpl = payload_data.get("totalNetPL")
+    pips = payload_data.get("pips")
+    size = payload_data.get("size")
+
+    lines = []
+    lines.append("✅ <b>Open Positions Update</b>")
+    lines.append(f"Provider: <code>{html_escape(provider_id)}</code>")
+    lines.append(f"Time (UTC): <code>{datetime.now(timezone.utc).isoformat()}</code>")
+    lines.append("")
+    lines.append(f"Tickets: <b>{len(new_tickets)}</b>")
+    if added:
+        lines.append(f"➕ Added: <code>{', '.join(map(str, added))}</code>")
+    if removed:
+        lines.append(f"➖ Removed: <code>{', '.join(map(str, removed))}</code>")
+    lines.append("")
+    lines.append("Snapshot:")
+    lines.append(f"• totalNetPL: <code>{html_escape(str(total_netpl))}</code>")
+    lines.append(f"• pips: <code>{html_escape(str(pips))}</code>")
+    lines.append(f"• size: <code>{html_escape(str(size))}</code>")
+
+    return "\n".join(lines)
+
 def main():
     email = require_env("FA_EMAIL")
     password = require_env("FA_PASSWORD")
     provider_id = os.getenv("PROVIDER_ID", "931")
+
     out_dir = os.getenv("OUT_DIR", "open_positions")
     os.makedirs(out_dir, exist_ok=True)
-
     out_path = os.path.join(out_dir, f"{provider_id}.json")
 
-    token = signin_and_get_token(email, password)
-    new_payload = fetch_open_positions(provider_id, token)
+    tg_token = os.getenv("TG_BOT_TOKEN")  # optional
+    tg_chat_id = os.getenv("TG_CHAT_ID")  # optional
 
-    # Wrap in your persisted structure (same as your example)
+    token = signin_and_get_token(email, password)
+    api_resp = fetch_open_positions(provider_id, token)
+
+    # Persist exactly like your current structure:
     new_file_obj = {
         "provider_id": str(provider_id),
         "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
-        "data": new_payload.get("data") if isinstance(new_payload, dict) and "data" in new_payload else new_payload,
+        "data": api_resp.get("data") if isinstance(api_resp, dict) and "data" in api_resp else api_resp,
     }
 
     new_tickets = extract_tickets({"data": new_file_obj["data"]})
 
     existing = read_existing_payload(out_path)
-    if existing:
-        old_tickets = extract_tickets(existing)
-        if new_tickets == old_tickets:
-            print(f"No ticket changes for provider {provider_id}. Not saving.")
-            sys.exit(0)
-        print(f"Tickets changed for provider {provider_id}: old={old_tickets} new={new_tickets}. Saving update.")
-    else:
-        print(f"No existing file for provider {provider_id}. Saving first snapshot.")
+    old_tickets = extract_tickets(existing) if existing else []
 
+    if existing and new_tickets == old_tickets:
+        print(f"No ticket changes for provider {provider_id}. Not saving.")
+        sys.exit(0)
+
+    # Save (only when changed OR first run)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(new_file_obj, f, ensure_ascii=False, indent=2)
-
     print(f"Saved: {out_path}")
+
+    # Telegram notify (only if TG vars provided)
+    if tg_token and tg_chat_id:
+        msg = build_message(provider_id, old_tickets, new_tickets, new_file_obj["data"])
+        send_telegram_html(tg_token, tg_chat_id, msg)
+        print("Telegram notification sent.")
 
 if __name__ == "__main__":
     main()
